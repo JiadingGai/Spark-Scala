@@ -61,7 +61,6 @@ object Demo {
     val df = df0.na.fill("missing").na.fill(-1.0)
     df.printSchema()
     df.show()
-    System.exit(1) 
 
     val CatVarList = sc.textFile("cat_var.list").collect()
     val CatVarListEncoded = CatVarList.map(cname => s"${cname}_index")
@@ -78,7 +77,13 @@ object Demo {
     val model = pipeline.fit(df)
 
     // Make predictions
-    val predictions = model.transform(df)
+    val dfv0 = sqlContext.read
+                        .format("com.databricks.spark.csv")
+                        .option("header", "true") // Use first line of all files as header
+                        .option("inferSchema", "true") // Automatically infer data types
+                        .load("data/demo_val.csv")
+    val dfv = dfv0.na.fill("missing").na.fill(-1.0)
+    val predictions = model.transform(dfv)
 
     /* Compute Metrics */
     val labelAndPreds = predictions.map(row => (row.getAs[Double]("TARGET_index"), row.getAs[Double]("prediction")))
@@ -94,7 +99,7 @@ object Demo {
     val accuracy = evaluator.evaluate(predictions)
     println("Test Error = " + (1.0 - accuracy))
 
-    if (true) {
+    if (false) {
       val gbtModel = model.stages(4).asInstanceOf[GBTClassificationModel]
       println("Learned classification GBT model:\n" + gbtModel.toDebugString)
     }
