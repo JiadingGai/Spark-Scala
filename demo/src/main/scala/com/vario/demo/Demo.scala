@@ -23,13 +23,11 @@ object Demo {
     val sc = new SparkContext(conf)
     val sqlContext = new org.apache.spark.sql.SQLContext(sc)
     
-    val df = sqlContext.read
+    val df0 = sqlContext.read
                         .format("com.databricks.spark.csv")
                         .option("header", "true") // Use first line of all files as header
                         .option("inferSchema", "true") // Automatically infer data types
                         .load("data/demo.csv")
-    df.printSchema()
-    df.show()
     /* - Hard-coded a demo dataset.
     if (false) {
       val df = sqlContext.createDataFrame(
@@ -58,6 +56,13 @@ object Demo {
       df.printSchema()
     }
     */
+
+    /* Fill in missing value */
+    val df = df0.na.fill("missing").na.fill(-1.0)
+    df.printSchema()
+    df.show()
+    System.exit(1) 
+
     val CatVarList = sc.textFile("cat_var.list").collect()
     val CatVarListEncoded = CatVarList.map(cname => s"${cname}_index")
     val TargetVariableList = Array("TARGET")
