@@ -3,6 +3,7 @@ package com.vario.demo
 import org.apache.spark.SparkContext
 import org.apache.spark.SparkContext._
 import org.apache.spark.SparkConf
+import org.apache.spark.sql.SQLContext
 
 // Jiading GAI
 import org.apache.spark.ml.classification.{GBTClassificationModel, GBTClassifier}
@@ -21,6 +22,14 @@ object Demo {
     val conf = new SparkConf().setAppName("Demo")
     val sc = new SparkContext(conf)
     val sqlContext = new org.apache.spark.sql.SQLContext(sc)
+    
+    val df0 = sqlContext.read
+                        .format("com.databricks.spark.csv")
+                        .option("header", "true") // Use first line of all files as header
+                        .option("inferSchema", "true") // Automatically infer data types
+                        .load("data/demo.csv")
+    df0.show()
+    System.exit(1)
 
     val df = sqlContext.createDataFrame(
       Seq((1.0,9.10,"WINK",0.01,"yes"),
