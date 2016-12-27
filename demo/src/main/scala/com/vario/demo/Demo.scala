@@ -30,7 +30,7 @@ object Demo {
                         .load("data/demo.csv")
     df.printSchema()
     df.show()
-
+    /* - Hard-coded a demo dataset.
     if (false) {
       val df = sqlContext.createDataFrame(
         Seq((1.0,9.10,"WINK",0.01,"yes"),
@@ -57,7 +57,7 @@ object Demo {
       df.show()
       df.printSchema()
     }
-
+    */
     val CatVarList = sc.textFile("cat_var.list").collect()
     val CatVarListEncoded = CatVarList.map(cname => s"${cname}_index")
     val TargetVariableList = Array("TARGET")
