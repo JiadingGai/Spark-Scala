@@ -78,10 +78,10 @@ object Demo {
 
     // Make predictions
     val dfv0 = sqlContext.read
-                        .format("com.databricks.spark.csv")
-                        .option("header", "true") // Use first line of all files as header
-                        .option("inferSchema", "true") // Automatically infer data types
-                        .load("data/demo_val.csv")
+                         .format("com.databricks.spark.csv")
+                         .option("header", "true") // Use first line of all files as header
+                         .option("inferSchema", "true") // Automatically infer data types
+                         .load("data/demo_val.csv")
     val dfv = dfv0.na.fill("missing").na.fill(-1.0)
     val predictions = model.transform(dfv)
 
