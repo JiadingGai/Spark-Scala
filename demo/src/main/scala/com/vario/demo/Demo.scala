@@ -23,39 +23,40 @@ object Demo {
     val sc = new SparkContext(conf)
     val sqlContext = new org.apache.spark.sql.SQLContext(sc)
     
-    val df0 = sqlContext.read
+    val df = sqlContext.read
                         .format("com.databricks.spark.csv")
                         .option("header", "true") // Use first line of all files as header
                         .option("inferSchema", "true") // Automatically infer data types
                         .load("data/demo.csv")
-    df0.show()
-    System.exit(1)
-
-    val df = sqlContext.createDataFrame(
-      Seq((1.0,9.10,"WINK",0.01,"yes"),
-          (1.0,9.20,"WINK",0.0346,"yes"),
-          (0.0,9.10,"PAST",0.1,"yes"),
-          (1.0,9.30,"WINK",0.0347,"yes"),
-          (0.0,9.70,"PAST",0.05,"no"),
-          (1.0,9.80,"WINK",0.1,"no"),
-          (0.0,9.90,"WINK",0.0347,"no"),
-          (0.0,8.10,"LOCK",0.0347,"no"),
-          (0.0,8.52,"PAST",0.0347,"yes"),
-          (0.0,8.66,"PAST",0.0347,"no"),
-          (0.0,7.84,"PAST",0.1,"yes"),
-          (0.0,6.92,"LOCK",0.0347,"no"),
-          (0.0,5.52,"PAST",0.05,"yes"),
-          (0.0,5.91,"LOCK",0.08,"no"),
-          (0.0,6.11,"PAST",0.1,"yes"),
-          (1.0,4.12,"PAST",0.1,"no"),
-          (1.0,3.54,"PAST",0.0347,"yes"),
-          (0.0,3.96,"LOCK",0.0346,"no"),
-          (1.0,2.01,"PAST",0.05,"yes"),
-          (0.0,1.55,"PAST",0.08,"no"))
-      ).toDF("TARGET","RATING","STYLE","FAILURE_RATE","SATISFACTION")
-    df.show()
     df.printSchema()
-    //System.exit(1)
+    df.show()
+
+    if (false) {
+      val df = sqlContext.createDataFrame(
+        Seq((1.0,9.10,"WINK",0.01,"yes"),
+            (1.0,9.20,"WINK",0.0346,"yes"),
+            (0.0,9.10,"PAST",0.1,"yes"),
+            (1.0,9.30,"WINK",0.0347,"yes"),
+            (0.0,9.70,"PAST",0.05,"no"),
+            (1.0,9.80,"WINK",0.1,"no"),
+            (0.0,9.90,"WINK",0.0347,"no"),
+            (0.0,8.10,"LOCK",0.0347,"no"),
+            (0.0,8.52,"PAST",0.0347,"yes"),
+            (0.0,8.66,"PAST",0.0347,"no"),
+            (0.0,7.84,"PAST",0.1,"yes"),
+            (0.0,6.92,"LOCK",0.0347,"no"),
+            (0.0,5.52,"PAST",0.05,"yes"),
+            (0.0,5.91,"LOCK",0.08,"no"),
+            (0.0,6.11,"PAST",0.1,"yes"),
+            (1.0,4.12,"PAST",0.1,"no"),
+            (1.0,3.54,"PAST",0.0347,"yes"),
+            (0.0,3.96,"LOCK",0.0346,"no"),
+            (1.0,2.01,"PAST",0.05,"yes"),
+            (0.0,1.55,"PAST",0.08,"no"))
+        ).toDF("TARGET","RATING","STYLE","FAILURE_RATE","SATISFACTION")
+      df.show()
+      df.printSchema()
+    }
 
     val CatVarList = sc.textFile("cat_var.list").collect()
     val CatVarListEncoded = CatVarList.map(cname => s"${cname}_index")
