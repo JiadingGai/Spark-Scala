@@ -68,8 +68,12 @@ object Demo {
 
     val transformers = df.columns.filter(cname => CatVarList.contains(cname))
                                  .map(cname => new StringIndexer().setInputCol(cname).setOutputCol(s"${cname}_index"))
-    val assembler = new VectorAssembler().setInputCols(df.columns.filter(cname => !TargetVariableList.contains(cname) && !CatVarList.contains(cname)))
+
+    val assembler = new VectorAssembler().setInputCols(
+                                            df.columns.filter(cname => !TargetVariableList.contains(cname) && 
+                                                              !CatVarList.contains(cname)))
                                          .setOutputCol("features")
+
     val gbt = new GBTClassifier().setLabelCol("TARGET_index").setFeaturesCol("features").setMaxIter(3)
 
     val stages: Array[org.apache.spark.ml.PipelineStage] = transformers :+ assembler :+ gbt
@@ -95,7 +99,9 @@ object Demo {
     predictions.select("TARGET_index", "prediction").show()
  
     // Select (prediction, true label) and compute test error
-    val evaluator = new MulticlassClassificationEvaluator().setLabelCol("TARGET_index").setPredictionCol("prediction").setMetricName("precision")
+    val evaluator = new MulticlassClassificationEvaluator().setLabelCol("TARGET_index")
+                                                           .setPredictionCol("prediction")
+                                                           .setMetricName("precision")
     val accuracy = evaluator.evaluate(predictions)
     println("Test Error = " + (1.0 - accuracy))
 
