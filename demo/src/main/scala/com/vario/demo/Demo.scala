@@ -69,6 +69,13 @@ object Demo {
     val transformers = df.columns.filter(cname => CatVarList.contains(cname))
                                  .map(cname => new StringIndexer().setInputCol(cname).setOutputCol(s"${cname}_index"))
 
+    /*
+      // Neat trick to find the type of any variable:
+      // The compiler will raise an error, providing you information about the actual return type it found.
+      // For example, the code will show that transformers has Array[org.apache.spark.ml.feature.StringIndexer].
+      val transformersType: Nothing = transformers
+    */
+
     val assembler = new VectorAssembler().setInputCols(
                                             df.columns.filter(cname => !TargetVariableList.contains(cname) && 
                                                               !CatVarList.contains(cname)))
