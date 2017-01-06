@@ -78,7 +78,7 @@ object Demo {
 
     val assembler = new VectorAssembler().setInputCols(
                                             df.columns.filter(cname => !TargetVariableList.contains(cname) && 
-                                                              !CatVarList.contains(cname)))
+                                                                       !CatVarList.contains(cname)))
                                          .setOutputCol("features")
 
     val gbt = new GBTClassifier().setLabelCol("TARGET_index").setFeaturesCol("features").setMaxIter(3)
