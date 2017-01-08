@@ -17,6 +17,8 @@ import org.apache.spark.mllib.evaluation.BinaryClassificationMetrics
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.linalg.Vectors
 
+import org.apache.spark.sql.functions.udf
+
 object Demo {
   def main(args: Array[String]) {
     val conf = new SparkConf().setAppName("Demo")
@@ -40,7 +42,7 @@ object Demo {
             (0.0,9.90,"WINK",0.0347,"no"),
             (0.0,8.10,"LOCK",0.0347,"no"),
             (0.0,8.52,"PAST",0.0347,"yes"),
-            (0.0,8.66,"PAST",0.0347,"no"),
+            (0.0,8.66,"QUIK",0.0347,"no"),
             (0.0,7.84,"PAST",0.1,"yes"),
             (0.0,6.92,"LOCK",0.0347,"no"),
             (0.0,5.52,"PAST",0.05,"yes"),
@@ -64,7 +66,7 @@ object Demo {
 
     val CatVarList = sc.textFile("cat_var.list").collect()
     val CatVarListEncoded = CatVarList.map(cname => s"${cname}_index")
-    val TargetVariableList = Array("TARGET")
+    val TargetVariableList = Array("TARGET", "TARGET_index")
 
     val transformers = df.columns.filter(cname => CatVarList.contains(cname))
                                  .map(cname => new StringIndexer().setInputCol(cname).setOutputCol(s"${cname}_index"))
@@ -75,17 +77,21 @@ object Demo {
       // For example, the code will show that transformers has Array[org.apache.spark.ml.feature.StringIndexer].
       val transformersType: Nothing = transformers
     */
+    var StringIndexerModels: Array[org.apache.spark.ml.feature.StringIndexerModel] = Array()
+    for (i <- 0 until transformers.length) {
+      StringIndexerModels = StringIndexerModels :+ transformers(i).fit(df)
+    }
 
     var dfIndexed = df
-    for (i <- 0 until transformers.length) {
-      dfIndexed = transformers(i).fit(dfIndexed).transform(dfIndexed)
+    for (i <- 0 until StringIndexerModels.length) {
+      dfIndexed = StringIndexerModels(i).transform(dfIndexed)
     }
     dfIndexed.show()
 
-    val assembler = new VectorAssembler().setInputCols(
-                                            dfIndexed.columns.filter(cname => !TargetVariableList.contains(cname) &&
-                                                                              !CatVarList.contains(cname)))
-                                         .setOutputCol("features")
+    val FeatureCols = dfIndexed.columns.filter(cname => !TargetVariableList.contains(cname) && !CatVarList.contains(cname))
+    val assembler = new VectorAssembler().setInputCols(FeatureCols).setOutputCol("features")
+    println("FeatureCols.size = " + FeatureCols.size)
+    FeatureCols.foreach(println)
 
     val gbt = new GBTClassifier().setLabelCol("TARGET_index").setFeaturesCol("features").setMaxIter(3)
 
@@ -94,21 +100,34 @@ object Demo {
     val model = pipeline.fit(dfIndexed)
     model.transform(dfIndexed).show()
 
-    // Make predictions
+    // Make validations 
     val dfv0 = sqlContext.read
                          .format("com.databricks.spark.csv")
                          .option("header", "true") // Use first line of all files as header
                          .option("inferSchema", "true") // Automatically infer data types
                          .load("data/demo_val.csv")
-    val dfv = dfv0.na.fill("missing").na.fill(-1.0)
+    var dfv = dfv0.na.fill("missing").na.fill(-1.0)
+
+    /* Detect unseen values and replace with the most frequent level */
+    for (i <- 0 until StringIndexerModels.length) {
+      val mapudf = udf { label: String =>
+                     if (StringIndexerModels(i).labels.contains(label))
+                       label
+                     else
+                       StringIndexerModels(i).labels(0)
+                   }
+
+      val ColumnName = StringIndexerModels(i).getInputCol
+      println("[Jiading Gai] " + ColumnName)
+      dfv = dfv.withColumn(ColumnName, mapudf(dfv(ColumnName)))
+    }
 
     /* Apply transformers separately */
     var dfvIndexed = dfv
-    for (i <- 0 until transformers.length) {
-      dfvIndexed = transformers(i).fit(dfvIndexed).transform(dfvIndexed)
+    for (i <- 0 until StringIndexerModels.length) {
+      dfvIndexed = StringIndexerModels(i).transform(dfvIndexed)
     }
     dfvIndexed.show()
-    System.exit(1)
 
     val predictions = model.transform(dfvIndexed)
 
