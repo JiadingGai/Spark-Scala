@@ -76,16 +76,23 @@ object Demo {
       val transformersType: Nothing = transformers
     */
 
+    var dfIndexed = df
+    for (i <- 0 until transformers.length) {
+      dfIndexed = transformers(i).fit(dfIndexed).transform(dfIndexed)
+    }
+    dfIndexed.show()
+
     val assembler = new VectorAssembler().setInputCols(
-                                            df.columns.filter(cname => !TargetVariableList.contains(cname) && 
-                                                                       !CatVarList.contains(cname)))
+                                            dfIndexed.columns.filter(cname => !TargetVariableList.contains(cname) &&
+                                                                              !CatVarList.contains(cname)))
                                          .setOutputCol("features")
 
     val gbt = new GBTClassifier().setLabelCol("TARGET_index").setFeaturesCol("features").setMaxIter(3)
 
-    val stages: Array[org.apache.spark.ml.PipelineStage] = transformers :+ assembler :+ gbt
-    val pipeline = new Pipeline().setStages(stages)
-    val model = pipeline.fit(df)
+    //val stages: Array[org.apache.spark.ml.PipelineStage] = assembler
+    val pipeline = new Pipeline().setStages(Array(assembler, gbt))
+    val model = pipeline.fit(dfIndexed)
+    model.transform(dfIndexed).show()
 
     // Make predictions
     val dfv0 = sqlContext.read
@@ -94,7 +101,16 @@ object Demo {
                          .option("inferSchema", "true") // Automatically infer data types
                          .load("data/demo_val.csv")
     val dfv = dfv0.na.fill("missing").na.fill(-1.0)
-    val predictions = model.transform(dfv)
+
+    /* Apply transformers separately */
+    var dfvIndexed = dfv
+    for (i <- 0 until transformers.length) {
+      dfvIndexed = transformers(i).fit(dfvIndexed).transform(dfvIndexed)
+    }
+    dfvIndexed.show()
+    System.exit(1)
+
+    val predictions = model.transform(dfvIndexed)
 
     /* Compute Metrics */
     val labelAndPreds = predictions.map(row => (row.getAs[Double]("TARGET_index"), row.getAs[Double]("prediction")))
