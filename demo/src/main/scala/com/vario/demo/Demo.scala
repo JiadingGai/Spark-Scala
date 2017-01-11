@@ -7,6 +7,8 @@ import org.apache.spark.sql.SQLContext
 
 // Jiading GAI
 import org.apache.spark.ml.classification.{GBTClassificationModel, GBTClassifier}
+import org.apache.spark.ml.classification.{RandomForestClassificationModel, RandomForestClassifier}
+import org.apache.spark.ml.classification.{DecisionTreeClassifier}
 import org.apache.spark.ml.evaluation.MulticlassClassificationEvaluator
 import org.apache.spark.ml.PipelineStage
 import org.apache.spark.ml.Pipeline
@@ -93,10 +95,15 @@ object Demo {
     println("FeatureCols.size = " + FeatureCols.size)
     FeatureCols.foreach(println)
 
-    val gbt = new GBTClassifier().setLabelCol("TARGET_index").setFeaturesCol("features").setMaxIter(3)
+    //val clf = new GBTClassifier().setLabelCol("TARGET_index").setFeaturesCol("features").setMaxIter(3)
+    //val clf = new DecisionTreeClassifier().setLabelCol("TARGET_index").setFeaturesCol("features").setImpurity("gini")
+    val clf = new RandomForestClassifier().setLabelCol("TARGET_index")
+                                          .setFeaturesCol("features")
+                                          .setNumTrees(66)
+                                          .setImpurity("gini")
 
     //val stages: Array[org.apache.spark.ml.PipelineStage] = assembler
-    val pipeline = new Pipeline().setStages(Array(assembler, gbt))
+    val pipeline = new Pipeline().setStages(Array(assembler, clf))
     val model = pipeline.fit(dfIndexed)
     model.transform(dfIndexed).show()
 
@@ -130,6 +137,8 @@ object Demo {
     dfvIndexed.show()
 
     val predictions = model.transform(dfvIndexed)
+    println("[Model predictions]")
+    predictions.show()
 
     /* Compute Metrics */
     val labelAndPreds = predictions.map(row => (row.getAs[Double]("TARGET_index"), row.getAs[Double]("prediction")))
@@ -148,8 +157,8 @@ object Demo {
     println("Test Error = " + (1.0 - accuracy))
 
     if (false) {
-      val gbtModel = model.stages(4).asInstanceOf[GBTClassificationModel]
-      println("Learned classification GBT model:\n" + gbtModel.toDebugString)
+      val clfModel = model.stages(1).asInstanceOf[RandomForestClassificationModel]
+      println("Learned classification clf model:\n" + clfModel.toDebugString)
     }
   }
 }
