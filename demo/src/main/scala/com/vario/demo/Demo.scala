@@ -34,6 +34,7 @@ object Demo {
                         .option("header", "true") // Use first line of all files as header
                         .option("inferSchema", "true") // Automatically infer data types
                         .load("data/demo.csv")
+
     /* - Hard-coded a demo dataset.
     if (false) {
       val df = sqlContext.createDataFrame(
