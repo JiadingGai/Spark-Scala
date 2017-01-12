@@ -18,6 +18,7 @@ import org.apache.spark.ml.feature.VectorAssembler
 import org.apache.spark.mllib.evaluation.BinaryClassificationMetrics
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.linalg.Vectors
+import org.apache.spark.mllib.linalg.DenseVector
 
 import org.apache.spark.sql.functions.udf
 
@@ -26,7 +27,8 @@ object Demo {
     val conf = new SparkConf().setAppName("Demo")
     val sc = new SparkContext(conf)
     val sqlContext = new org.apache.spark.sql.SQLContext(sc)
-    
+    import sqlContext.implicits._
+
     val df0 = sqlContext.read
                         .format("com.databricks.spark.csv")
                         .option("header", "true") // Use first line of all files as header
@@ -107,7 +109,7 @@ object Demo {
     val model = pipeline.fit(dfIndexed)
     model.transform(dfIndexed).show()
 
-    // Make validations 
+    // Make validations
     val dfv0 = sqlContext.read
                          .format("com.databricks.spark.csv")
                          .option("header", "true") // Use first line of all files as header
@@ -138,17 +140,56 @@ object Demo {
 
     val predictions = model.transform(dfvIndexed)
     println("[Model predictions]")
+
+    /* Manipulate scores and GetTopXPR */
     predictions.show()
 
+    //Obtain scoreAndLabels and cumsum
+    val ScoreAndLabels = predictions.map(row => (row.getAs[DenseVector]("probability")(1), row.getAs[Double]("TARGET_index"))).sortBy(-_._2)
+    val SortedLabels = ScoreAndLabels.toDF.select("_2").rdd.map(r => r(0).asInstanceOf[Double]).collect()
+
+    var SortedWeights = new Array[Double](SortedLabels.length)
+    for (i <- 0 until SortedLabels.length) {
+      if (SortedLabels(i) == 1.0) {
+        SortedWeights(i) = 1.0
+      } else {
+        SortedWeights(i) = 40.0
+      }
+    }
+
+    var CumTotal = SortedWeights.map(_.toInt).scanLeft(0)(_ + _).tail.map(_.toDouble)
+    var CumBad = SortedLabels.map(_.toInt).scanLeft(0)(_ + _).tail.map(_.toDouble)
+    var CumGood = new Array[Double](SortedLabels.length)
+    for (i <- 0 until SortedLabels.length) {
+      CumGood(i) = CumTotal(i) - CumBad(i)
+    }
+
+    var CumTotalNormalized = new Array[Double](SortedLabels.length)
+    for (i <- 0 until SortedLabels.length) {
+      CumTotalNormalized(i) = CumTotal(i) / CumTotal(CumTotal.length - 1)
+    }
+
+    val TDRpct = Array[Double](0.0025, 0.01, 0.02, 0.05, 0.1, 0.2, 0.5)
+    var TDR = new Array[Double](TDRpct.length)
+    for (i <- 0 until TDRpct.length) {
+      val pct = TDRpct(i)
+      var Idx = 0
+      for (j <- 1 until CumTotalNormalized.length) {
+          if (CumTotalNormalized(j) >= pct && CumTotalNormalized(j-1) <= pct) {
+            Idx = j
+          }
+      }
+      println("TDR pct " + pct + " at " + Idx + " = " + CumBad(Idx) / CumBad(CumBad.length - 1))
+    }
+
     /* Compute Metrics */
-    val labelAndPreds = predictions.map(row => (row.getAs[Double]("TARGET_index"), row.getAs[Double]("prediction")))
-    val metrics = new BinaryClassificationMetrics(labelAndPreds)
+    val metrics = new BinaryClassificationMetrics(ScoreAndLabels)
     val auROC = metrics.areaUnderROC
     println("Area under ROC = " + auROC)
 
     // Select example rows to display
     predictions.select("TARGET_index", "prediction").show()
- 
+
     // Select (prediction, true label) and compute test error
     val evaluator = new MulticlassClassificationEvaluator().setLabelCol("TARGET_index")
                                                            .setPredictionCol("prediction")
