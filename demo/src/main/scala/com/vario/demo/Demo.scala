@@ -146,7 +146,7 @@ object Demo {
     predictions.show()
 
     //Obtain scoreAndLabels and cumsum
-    val ScoreAndLabels = predictions.map(row => (row.getAs[DenseVector]("probability")(1), row.getAs[Double]("TARGET_index"))).sortBy(-_._2)
+    val ScoreAndLabels = predictions.map(row => (row.getAs[DenseVector]("probability")(1), row.getAs[Double]("TARGET_index"))).sortBy(-_._1)
     val SortedLabels = ScoreAndLabels.toDF.select("_2").rdd.map(r => r(0).asInstanceOf[Double]).collect()
 
     var SortedWeights = new Array[Double](SortedLabels.length)
