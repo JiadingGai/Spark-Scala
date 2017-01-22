@@ -10,4 +10,4 @@ REFERENCE:
     1) Type start-master.sh
     2) In a webbrowser, go to localhost:8080 and copy the <SPARK_URL> for this session.
     3) Type start-slave.sh <SPARK_URL>
-    NOTE: under conf/spark-env.sh, add SPARK_MASTER_IP='<your-ip>' 
+    NOTE: under conf/spark-env.sh, add SPARK_MASTER_IP='your-ip' 
