@@ -7,15 +7,18 @@ import org.apache.spark.sql.SQLContext
 import org.apache.spark.ml.classification.{GBTClassificationModel, GBTClassifier}
 import org.apache.spark.ml.classification.{RandomForestClassificationModel, RandomForestClassifier}
 import org.apache.spark.ml.classification.{DecisionTreeClassifier}
+import org.apache.spark.ml.classification.MultilayerPerceptronClassifier
 import org.apache.spark.ml.evaluation.MulticlassClassificationEvaluator
 import org.apache.spark.ml.PipelineStage
 import org.apache.spark.ml.Pipeline
 import org.apache.spark.ml.feature.StringIndexer
+import org.apache.spark.ml.feature.OneHotEncoder
 
 import org.apache.spark.ml.feature.VectorAssembler
 import org.apache.spark.mllib.evaluation.BinaryClassificationMetrics
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.linalg.Vectors
+import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.linalg.DenseVector
 
 import org.apache.spark.sql.functions.udf
@@ -63,12 +66,13 @@ val df = df0.na.fill("missing").na.fill(-1.0)
 df.printSchema()
 df.show()
 
+val ContVarList = sc.textFile("cont_var.list").collect()
 val CatVarList = sc.textFile("cat_var.list").collect()
-val CatVarListEncoded = CatVarList.map(cname => s"${cname}_index")
-val TargetVariableList = Array("TARGET", "TARGET_index")
+val CatVarListEncoded = CatVarList.map(cname => s"${cname}_Index")
+val TargetVarList = sc.textFile("target_var.list").collect()
+val TargetVarListEncoded = TargetVarList.map(cname => s"${cname}_Index")
 
-val transformers = df.columns.filter(cname => CatVarList.contains(cname))
-                             .map(cname => new StringIndexer().setInputCol(cname).setOutputCol(s"${cname}_index"))
+val transformers = df.columns.filter(cname => CatVarList.contains(cname) || TargetVarList.contains(cname)).map(cname => new StringIndexer().setInputCol(cname).setOutputCol(s"${cname}_Index"))
 
 /*
   // Neat trick to find the type of any variable:
@@ -87,22 +91,38 @@ for (i <- 0 until StringIndexerModels.length) {
 }
 dfIndexed.show()
 
-val FeatureCols = dfIndexed.columns.filter(cname => !TargetVariableList.contains(cname) && !CatVarList.contains(cname))
-val assembler = new VectorAssembler().setInputCols(FeatureCols).setOutputCol("features")
-println("FeatureCols.size = " + FeatureCols.size)
-FeatureCols.foreach(println)
+/* OneHotEncoder - only encode predictors, not target variable */
+val encoders = dfIndexed.columns.filter(cname => CatVarListEncoded.contains(cname)).map(cname => new OneHotEncoder().setInputCol(cname).setOutputCol(s"${cname}AndEncode"))
+var dfIndexAndEncode = dfIndexed
+for (i <- 0 until encoders.length) {
+  dfIndexAndEncode = encoders(i).transform(dfIndexAndEncode) 
+}
+dfIndexAndEncode.show()
 
-//val clf = new GBTClassifier().setLabelCol("TARGET_index").setFeaturesCol("features").setMaxIter(3)
-//val clf = new DecisionTreeClassifier().setLabelCol("TARGET_index").setFeaturesCol("features").setImpurity("gini")
-val clf = new RandomForestClassifier().setLabelCol("TARGET_index")
-                                      .setFeaturesCol("features")
-                                      .setNumTrees(66)
-                                      .setImpurity("gini")
+val asDense = udf((v: Vector) => v.toDense)
+val CatVarUnpackedList = CatVarList.map(cname => s"${cname}_upacked")
+val CatVarIndexAndEncodeList = CatVarList.map(cname => s"${cname}_IndexAndEncode")
+var dfUnpacked = dfIndexAndEncode
+for (i <- 0 until CatVarUnpackedList.length) {
+  dfUnpacked = dfUnpacked.withColumn(CatVarUnpackedList(i), asDense(dfUnpacked.col(CatVarIndexAndEncodeList(i))))
+}
 
-//val stages: Array[org.apache.spark.ml.PipelineStage] = assembler
-val pipeline = new Pipeline().setStages(Array(assembler, clf))
-val model = pipeline.fit(dfIndexed)
-model.transform(dfIndexed).show()
+val CatVectorName = "CatVector"
+val CatAssembler = new VectorAssembler().setInputCols(CatVarUnpackedList).setOutputCol(CatVectorName)
+val dfCatVector = CatAssembler.transform(dfUnpacked).withColumn(CatVectorName, asDense(new Column(CatVectorName)))
+
+val ContVectorName = "ContVector"
+val ContAssembler = new VectorAssembler().setInputCols(ContVarList).setOutputCol(ContVectorName)
+val dfContCatVector = ContAssembler.transform(dfCatVector)
+
+val FeatureVectorName = "Vector"
+val ContCatAssembler = new VectorAssembler().setInputCols(Array(CatVectorName, ContVectorName)).setOutputCol(FeatureVectorName)
+val dfFinal = ContCatAssembler.transform(dfContCatVector)
+
+val layers = Array(7,3,2)
+val clf = new MultilayerPerceptronClassifier().setLayers(layers).setBlockSize(200).setSeed(1234L).setMaxIter(100).setLabelCol("TARGET_Index").setFeaturesCol("Vector")
+clf.fit(dfFinal).transform(dfFinal).select("TARGET_Index", "prediction").show()
+
 
 // Make validations
 val dfv0 = sqlContext.read
