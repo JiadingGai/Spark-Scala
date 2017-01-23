@@ -6,6 +6,7 @@ import org.apache.spark.SparkConf
 import org.apache.spark.sql.SQLContext
 
 // Jiading GAI
+import org.apache.spark.ml.classification.MultilayerPerceptronClassifier
 import org.apache.spark.ml.classification.{GBTClassificationModel, GBTClassifier}
 import org.apache.spark.ml.classification.{RandomForestClassificationModel, RandomForestClassifier}
 import org.apache.spark.ml.classification.{DecisionTreeClassifier}
@@ -98,17 +99,31 @@ object Demo {
     println("FeatureCols.size = " + FeatureCols.size)
     FeatureCols.foreach(println)
 
+    val dfModelReady = assembler.transform(dfIndexed)
+
     //val clf = new GBTClassifier().setLabelCol("TARGET_index").setFeaturesCol("features").setMaxIter(3)
-    //val clf = new DecisionTreeClassifier().setLabelCol("TARGET_index").setFeaturesCol("features").setImpurity("gini")
+
+    //val clf = new DecisionTreeClassifier().setLabelCol("TARGET_index")
+    //                                      .setFeaturesCol("features")
+    //                                      .setImpurity("gini")
+
     val clf = new RandomForestClassifier().setLabelCol("TARGET_index")
                                           .setFeaturesCol("features")
                                           .setNumTrees(66)
                                           .setImpurity("gini")
 
+    //val layers = Array[Int](4, 3, 2)
+    //val clf = new MultilayerPerceptronClassifier().setLayers(layers)
+    //                                              .setBlockSize(128)
+    //                                              .setSeed(1234L)
+    //                                              .setMaxIter(100)
+    //                                              .setLabelCol("TARGET_index")
+    //                                              .setFeaturesCol("features")
+
     //val stages: Array[org.apache.spark.ml.PipelineStage] = assembler
-    val pipeline = new Pipeline().setStages(Array(assembler, clf))
-    val model = pipeline.fit(dfIndexed)
-    model.transform(dfIndexed).show()
+    //val pipeline = new Pipeline().setStages(Array(assembler, clf))
+    val clfModel = clf.fit(dfModelReady)
+    clfModel.transform(dfModelReady).show()
 
     // Make validations
     val dfv0 = sqlContext.read
@@ -139,7 +154,9 @@ object Demo {
     }
     dfvIndexed.show()
 
-    val predictions = model.transform(dfvIndexed)
+    var dfvModelReady = assembler.transform(dfvIndexed)
+
+    val predictions = clfModel.transform(dfvModelReady)
     println("[Model predictions]")
 
     /* Manipulate scores and GetTopXPR */
@@ -198,8 +215,7 @@ object Demo {
     val accuracy = evaluator.evaluate(predictions)
     println("Test Error = " + (1.0 - accuracy))
 
-    if (false) {
-      val clfModel = model.stages(1).asInstanceOf[RandomForestClassificationModel]
+    if (true) {
       println("Learned classification clf model:\n" + clfModel.toDebugString)
     }
   }
