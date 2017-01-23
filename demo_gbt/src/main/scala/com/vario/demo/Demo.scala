@@ -21,7 +21,8 @@ import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.linalg.DenseVector
 
-import org.apache.spark.sql.functions.udf
+import org.apache.spark.sql.functions._
+import org.apache.spark.sql.Column
 
 object Demo {
   def main(args: Array[String]) {
@@ -149,8 +150,25 @@ object Demo {
     /* Manipulate scores and GetTopXPR */
     predictions.show()
 
+    var dfvTransform = dfModelReady
+    val NumTrees = clfModel.trees.size
+    for (i <- 0 until NumTrees) {
+      val ThePredictionCol = clfModel.trees(i).asInstanceOf[org.apache.spark.ml.regression.DecisionTreeRegressionModel].getPredictionCol
+      dfvTransform = clfModel.trees(i).asInstanceOf[org.apache.spark.ml.regression.DecisionTreeRegressionModel]
+                                      .transform(dfvTransform).withColumnRenamed(ThePredictionCol, s"tree_${i}")
+    }
+
+    var TreesToSum: List[org.apache.spark.sql.Column] = List()
+    var TreeWeights = clfModel.treeWeights
+    for (i <- 0 until NumTrees) {
+      TreesToSum = TreesToSum :+ col(s"tree_${i}") * TreeWeights(i)
+    }
+    var dfvScore = dfvTransform.withColumn("RawScores", TreesToSum.reduce(_+_))
+    val logitFunc = udf({x: Double => 1 / (1 + Math.exp(-1 * x))})
+    var ProbPredictions = dfvScore.withColumn("probability", logitFunc(col("RawScores")))
+
     //Obtain scoreAndLabels and cumsum
-    val ScoreAndLabels = predictions.map(row => (row.getAs[DenseVector]("probability")(1), row.getAs[Double]("TARGET_index"))).sortBy(-_._1)
+    val ScoreAndLabels = ProbPredictions.map(row => (row.getAs[Double]("probability"), row.getAs[Double]("TARGET_index"))).sortBy(-_._1)
     val SortedLabels = ScoreAndLabels.toDF.select("_2").rdd.map(r => r(0).asInstanceOf[Double]).collect()
 
     var SortedWeights = new Array[Double](SortedLabels.length)
@@ -191,16 +209,6 @@ object Demo {
     val metrics = new BinaryClassificationMetrics(ScoreAndLabels)
     val auROC = metrics.areaUnderROC
     println("Area under ROC = " + auROC)
-
-    // Select example rows to display
-    predictions.select("TARGET_index", "prediction").show()
-
-    // Select (prediction, true label) and compute test error
-    val evaluator = new MulticlassClassificationEvaluator().setLabelCol("TARGET_index")
-                                                           .setPredictionCol("prediction")
-                                                           .setMetricName("precision")
-    val accuracy = evaluator.evaluate(predictions)
-    println("Test Error = " + (1.0 - accuracy))
 
     if (true) {
       println("Learned classification clf model:\n" + clfModel.toDebugString)
